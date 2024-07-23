@@ -1,7 +1,7 @@
 ---
-title: "Client Report - [Insert Project Title]"
+title: "Client Report - Project 5"
 subtitle: "Course DS 250"
-author: "[STUDENT NAME]"
+author: "Jordan Moore"
 format:
   html:
     self-contained: true
@@ -25,4 +25,370 @@ execute:
     
 ---
 
-### Paste in a template
+```{python}
+import pandas as pd 
+import numpy as np
+import sqlite3
+import matplotlib.pyplot as plt
+import numpy as np
+```
+
+### Elevator pitch
+
+__Key Insights__
+
+-Some of the key insights noted when predicting income is an Education above a High School Diploma, Finding Jar-Jar Bikns unfavorable, and having being a male. We can see throughout this time how messy data entry and usage was and the difficulty to clean it up and make it presentable and in our case make it useful.
+
+```{python}
+# %%
+url = 'https://github.com/fivethirtyeight/data/raw/master/star-wars-survey/StarWars.csv'
+# https://stackoverflow.com/questions/18171739/unicodedecodeerror-when-reading-csv-file-in-pandas-with-python
+
+df_cols = pd.read_csv(url, encoding = "ISO-8859-1", nrows = 1).melt()
+df = pd.read_csv(url, encoding = "ISO-8859-1", header = None )
+```
+
+### QUESTION|TASK 1
+
+__TODO:COPY PASTE QUESTION|TASK 1 FROM THE PROJECT HERE__
+
+-Old column names shown first and transitioned to the new column names.
+
+
+```{python}
+old_column_names = df.iloc[0]
+old_column_names
+
+```
+
+
+```{python}
+df = df.iloc[1:]
+```
+
+```{python}
+new_column_names = [
+    "Respondant ID",
+    "seen_any",
+    "fan_star_wars",
+    "seen_episode1",
+    "seen_episode2",
+    "seen_episode3",
+    "seen_episode4",
+    "seen_episode5",
+    "seen_episode6",
+    "rank_episode1",
+    "rank_episode2",
+    "rank_episode3",
+    "rank_episode4",
+    "rank_episode5",
+    "rank_episode6",
+    "rate_han_solo",
+    "rate_luke_skywalker",
+    "rate_princess_leia_organa",
+    "rate_anakin_skywalker",
+    "rate_obi_wan_kenobi",
+    "rate_emperor_palpatine",
+    "rate_darth_vader",
+    "rate_lando_calrissian",
+    "rate_boba_fett",
+    "rate_c-3p0",
+    "rate_r2_d2",
+    "rate_jar_jar_binks",
+    "rate_padme_amidala",
+    "rate_yoda",
+    "shot_first",
+    "expanded_universe",
+    "expanded_fan",
+    "star_trek_fan",
+    "gender",
+    "age",
+    "income",
+    "education",
+    "location"
+]
+
+# Rename the columns
+df.columns = new_column_names
+df.columns
+```
+
+### QUESTION|TASK 2A-2F
+
+__Clean and format the data so that it can be used in a machine learning model. As you format the data, you should complete each item listed below. In your final report provide example(s) of the reformatted data with a short description of the changes made.__
+__Filter the dataset to respondents that have seen at least one film.__
+__Create a new column that converts the age ranges to a single number. Drop the age range categorical column.__
+__Create a new column that converts the education groupings to a single number. Drop the school categorical column.__
+__Create a new column that converts the income ranges to a single number. Drop the income range categorical column.__
+__Create your target (also known as “y” or “label”) column based on the new income range column.__
+__One-hot encode all remaining categorical columns.__
+
+-Starting from raw data and changing age, income, and education in a way that could be used in machine learning algorithm. Converted age range to a base age, education into a grouping based on 1 being less than high school and 5 being a graduate degree, and income into a single number. The income range was used in the machine learning to predict who or what you need to look at when trying to find someone who makes more than $50,000 and is a fan of Star Wars.
+
+```{python}
+starwars = df[df['seen_any'] == 'Yes']
+starwars.head(6)
+```
+
+```{python}
+age_range = (df.age
+            .str.replace('18-29', '18')
+            .str.replace('30-44', '30')
+            .str.replace('45-60', '45')
+            .str.replace('> 60', '60')
+            .replace('Response', np.nan)
+            .astype('float'))
+
+
+```
+
+```{python}
+income_num = (df.income
+              .str.split("-", expand=True)
+              .rename(columns={0: 'income_min', 1: 'income_max'})
+              .apply(lambda x: x.str.replace("$", "").str.replace(",", "").str.replace("+", ""))
+              .replace('Response', np.nan)
+              .astype('float')
+              .fillna(0))
+
+```
+
+```{python}
+new_education = (df.education
+             .str.replace('Less than high school degree', '1')
+             .str.replace('High school degree', '2')
+             .str.replace('Some college or Associate degree', '3')
+             .str.replace('Bachelor degree', '4')
+             .str.replace('Graduate degree', '5')
+             .replace('Response', np.nan)
+             .astype('float')
+             .fillna(0))
+
+```
+```{python}
+# How to join columns back into a df
+df_example = pd.concat([
+    age_range,
+    income_num.income_min,
+    new_education
+], axis = 1)
+df_example.head(6)
+```
+
+```{python}
+starwars = starwars.drop(['age', 'income', 'education'], axis=1)
+starwars_ml = pd.concat([starwars, df_example], axis=1)
+starwars_ml = starwars_ml.dropna(subset=['seen_any'])
+starwars_ml.head(10)
+
+```
+
+-One hot encode
+
+```{python}
+# List of columns to transform
+columns_to_transform = [
+    "seen_episode1",
+    "seen_episode2",
+    "seen_episode3",
+    "seen_episode4",
+    "seen_episode5",
+    "seen_episode6",
+]
+for column in columns_to_transform:
+    starwars_ml[column] = starwars_ml[column].map(lambda x: "No" if pd.isna(x) else "Yes")
+
+# The columns I'm transforming
+rating_columns = [
+    "rate_han_solo",
+    "rate_luke_skywalker",
+    "rate_princess_leia_organa",
+    "rate_anakin_skywalker",
+    "rate_obi_wan_kenobi",
+    "rate_emperor_palpatine",
+    "rate_darth_vader",
+    "rate_lando_calrissian",
+    "rate_boba_fett",
+    "rate_c-3p0",
+    "rate_r2_d2",
+    "rate_jar_jar_binks",
+    "rate_padme_amidala",
+    "rate_yoda",
+]
+
+def map_ratings(rating):
+    if rating in ["Very favorably", "Somewhat favorably"]:
+        return "Favorably"
+    elif rating in ["Very unfavorably", "Somewhat unfavorably"]:
+        return "Unfavorable"
+    elif rating in ["Neither favorably nor unfavorably (neutral)", np.nan, "Unfamiliar (N/A)"]:
+        return "Unfamiliar"
+    else:
+        return rating  # Just in case there are other categories not mentioned
+
+for column in rating_columns:
+    starwars_ml[column] = starwars_ml[column].apply(map_ratings)
+
+starwars_ml['shot_first'] = starwars_ml['shot_first'].apply(lambda x: "Unfamiliar" if x == "I don't understand this question" or pd.isna(x) else x)
+    
+    
+starwars_ml["fan_star_wars"] = starwars_ml["fan_star_wars"].apply(lambda x: "No" if pd.isna(x) else x)
+starwars_ml["rank_episode1"] = starwars_ml["rank_episode1"].apply(lambda x: "Unfamiliar" if pd.isna(x) else x)
+starwars_ml["rank_episode2"] = starwars_ml["rank_episode2"].apply(lambda x: "Unfamiliar" if pd.isna(x) else x)
+starwars_ml["rank_episode3"] = starwars_ml["rank_episode3"].apply(lambda x: "Unfamiliar" if pd.isna(x) else x)
+starwars_ml["rank_episode4"] = starwars_ml["rank_episode4"].apply(lambda x: "Unfamiliar" if pd.isna(x) else x)
+starwars_ml["rank_episode5"] = starwars_ml["rank_episode5"].apply(lambda x: "Unfamiliar" if pd.isna(x) else x)
+starwars_ml["rank_episode6"] = starwars_ml["rank_episode6"].apply(lambda x: "Unfamiliar" if pd.isna(x) else x)
+starwars_ml["expanded_universe"] = starwars_ml["expanded_universe"].apply(lambda x: "No" if pd.isna(x) else x)
+starwars_ml["expanded_fan"] = starwars_ml["expanded_fan"].apply(lambda x: "No" if pd.isna(x) else x)
+starwars_ml["star_trek_fan"] = starwars_ml["star_trek_fan"].apply(lambda x: "No" if pd.isna(x) else x)
+starwars_ml['income_label'] = starwars_ml['income_min'].apply(lambda x: 1 if x > 50000 else 0)
+starwars_ml.dropna(subset=['gender', 'location', 'age'], inplace=True)
+
+
+columns_to_transform = ['seen_any', 'fan_star_wars', 'seen_episode1',
+    'seen_episode2', 'seen_episode3', 'seen_episode4', 'seen_episode5',
+    'seen_episode6', 'rank_episode1', 'rank_episode2', 'rank_episode3',
+    'rank_episode4', 'rank_episode5', 'rank_episode6', 'rate_han_solo',
+    'rate_luke_skywalker', 'rate_princess_leia_organa',
+    'rate_anakin_skywalker', 'rate_obi_wan_kenobi',
+    'rate_emperor_palpatine', 'rate_darth_vader', 'rate_lando_calrissian',
+    'rate_boba_fett', 'rate_c-3p0', 'rate_r2_d2', 'rate_jar_jar_binks',
+    'rate_padme_amidala', 'rate_yoda', 'shot_first', 'expanded_universe',
+    'expanded_fan', 'star_trek_fan', 'gender', 'location', 'age',
+    'income_min', 'education'
+]
+
+# Apply pd.get_dummies to all columns except 'income_min'
+starwars_ml = pd.get_dummies(starwars_ml, columns=columns_to_transform, drop_first=True)
+```
+
+### QUESTION|TASK 3
+
+__Validate that the data provided on GitHub lines up with the article by recreating 2 of the visuals from the article.__
+
+-Here we have two graphs based on the articles information. The data was incorrect on my graphing.
+
+```{python}
+import matplotlib.pyplot as plt
+
+star_wars_bar = df
+star_wars_bar = df[df['seen_any'] == 'Yes']
+
+episode_columns = ["seen_episode1", "seen_episode2", "seen_episode3", "seen_episode4", "seen_episode5", "seen_episode6"]
+episode_titles = ['Episode IV - A New Hope', 'Episode V - The Empire Strikes Back', 
+                  'Episode VI - Return of the Jedi', 'Episode I - The Phantom Menace', 
+                  'Episode II - Attack of the Clones', 'Episode III - Revenge of the Sith']
+
+percentages = [(star_wars_bar[column].notna().sum() / len(star_wars_bar)) * 100 for column in episode_columns]
+plot_data = pd.DataFrame({'Episode': episode_titles, 'Percentage': percentages})
+plt.figure(figsize=(10, 8))
+plt.barh(plot_data['Episode'], plot_data['Percentage'], color='blue')
+
+for index, value in enumerate(plot_data['Percentage']):
+    plt.text(value, index, f"{value:.2f}%", va='center')
+
+plt.xlabel('Percentage')
+plt.ylabel('Episode')
+plt.title("Which 'Star Wars' Movies Have You Seen?")
+plt.show()
+```
+
+```{python}
+star_wars_charts = df
+
+# Filter data where seen_any = Yes and have seen all episodes
+seen_all_data = star_wars_charts[(star_wars_charts['seen_any'] == 'Yes') & 
+                                 (star_wars_charts['seen_episode1'].notna()) &
+                                 (star_wars_charts['seen_episode2'].notna()) &
+                                 (star_wars_charts['seen_episode3'].notna()) &
+                                 (star_wars_charts['seen_episode4'].notna()) &
+                                 (star_wars_charts['seen_episode5'].notna()) &
+                                 (star_wars_charts['seen_episode6'].notna())]
+
+# Calculate percentages of respondents who rated each episode as 6
+episode_columns = ['rank_episode1', 'rank_episode2', 'rank_episode3',
+                   'rank_episode4', 'rank_episode5', 'rank_episode6']
+episode_titles = ['Episode IV - A New Hope', 'Episode V - The Empire Strikes Back', 
+                  'Episode VI - Return of the Jedi', 'Episode I - The Phantom Menace', 
+                  'Episode II - Attack of the Clones', 'Episode III - Revenge of the Sith']
+
+seen_all_data = seen_all_data[['rank_episode1', 'rank_episode2', 'rank_episode3', 'rank_episode4', 'rank_episode5', 'rank_episode6']]
+seen_all_data[episode_columns] = seen_all_data[episode_columns].fillna(-1).astype(int)
+rank_episode_dtypes = seen_all_data[episode_columns].dtypes
+
+total_respondents = len(seen_all_data)
+episode_counts = seen_all_data[episode_columns].apply(lambda x: (x == 6).sum())
+episode_percentages = (episode_counts / total_respondents) * 100
+
+plot_data = pd.DataFrame({'rank_episode': episode_titles, 'percentage': episode_percentages})
+plot_data.set_index('rank_episode', inplace=True)
+
+plt.figure(figsize=(10, 8))
+plot_data['percentage'].plot(kind='barh', color='blue')
+for index, value in enumerate(plot_data['percentage']):
+    plt.text(value, index, f"{value:.2f}%", va='center')
+plt.xlabel('Percentage')
+plt.ylabel('Rank Episode')
+plt.title("What's the Best 'Star Wars' Movie?")
+plt.show()
+
+```
+
+### QUESTION|TASK 4 and Stretch 1
+
+__Build a machine learning model that predicts whether a person makes more than $50k. Describe your model and report the accuracy.__
+__Build a machine learning model that predicts whether a person makes more than $50k. With accuracy of at least 65%. Describe your model and report the accuracy.__
+
+-Both question 4 and stretch question 1 were combined as the machine learning we used, which was Random Forest Classifier, found a 77% predictablity rate. Second we see the importance of education when predicting income for Star Wars Fans.
+
+```{python}
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report
+
+X = starwars_ml.drop(columns=['Respondant ID', 'income_label','income_min_100000.0','income_min_150000.0','income_min_50000.0','income_min_25000.0'])
+y = starwars_ml['income_label']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.34, random_state=76)
+
+rf_clf = RandomForestClassifier(n_estimators=10)
+rf_clf.fit(X_train, y_train)
+
+y_pred = rf_clf.predict(X_test)
+
+print(classification_report(y_test, y_pred))
+
+```
+```{python}
+import plotly.express as px
+
+df_features = pd.DataFrame(
+    {'f_names': X_train.columns, 
+     'f_values': rf_clf.feature_importances_}
+).sort_values('f_values', ascending=False)
+
+chart = px.bar(df_features.head(14),
+    x='f_values', 
+    y='f_names'
+)
+
+chart.update_layout(yaxis={'categoryorder':'total ascending'})
+chart.update_layout(
+    title_text="Weighted values for Random Forest",
+    title_x=0.5,
+    annotations=[
+        dict(
+            text="The highest weighted values used by Random Forest prediction with the variables on the left and the weight on the bottom",
+            showarrow=False,
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=-0.2,
+            font=dict(size=12)
+        )
+    ]
+)
+chart.show()
+```
+
+

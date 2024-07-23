@@ -1,7 +1,7 @@
 ---
-title: "Client Report - [Insert Project Title]"
+title: "Client Report - Project 3"
 subtitle: "Course DS 250"
-author: "[STUDENT NAME]"
+author: "Jordan Moore"
 format:
   html:
     self-contained: true
@@ -25,4 +25,224 @@ execute:
     
 ---
 
-### Paste in a template
+```{python}
+import pandas as pd 
+import numpy as np
+import sqlite3
+import matplotlib.pyplot as plt
+import numpy as np
+```
+
+## Elevator pitch
+__Baseball is one of the most beautiful sports in the world but also one of the most analyzed as well. We can see in this report the history of batting average, players from certain schools, and relationships between teams or positions and their data. How come the Seattle Mariners can't win? Should we invest in 1st basemen over shortstops due to longevity and financial contracts? We're able to find out different information from baseball history and what it means for the future of baseball.__
+
+
+```{python}
+# %%
+# careful to list your path to the file or save it in the same place as your .qmd or .py file
+sqlite_file = r'C:\Users\Jordan\Documents\GitHub\moorejordan11_sp24\250_Projects\lahmansbaseballdb.sqlite'
+con = sqlite3.connect(sqlite_file)
+```
+
+## Question 1\|Task 1
+__Write an SQL query to create a new dataframe about baseball players who attended BYU-Idaho. The new table should contain five columns: playerID, schoolID, salary, and the yearID/teamID associated with each salary. Order the table by salary (highest to lowest) and print out the table in your report.__
+
+- We can see there's two known players who attended BYU-I and played Major League Baseball. Matt Lindstrom and Garrett Stephenson with their years of playing 10+ years apart. We see their careers were not very long but they did receive fair compensation for their time.
+
+```{python}
+q1 = '''
+SELECT p.nameFirst AS "First Name", p.nameLast AS "Last Name", cp.schoolID, s.salary, cp.yearID, s.teamID
+FROM collegeplaying cp
+LEFT JOIN salaries s ON cp.playerID = s.playerID
+INNER JOIN people p ON cp.playerID = p.playerID
+INNER JOIN pitching pt ON p.playerID = pt.playerID
+WHERE schoolID = 'idbyuid' AND salary > 0
+GROUP BY s.playerID, cp.yearID, cp.schoolID, s.teamID
+ORDER BY salary DESC
+LIMIT 15
+'''
+results = pd.read_sql_query(q1,con)
+
+print(results)
+```
+
+## Question 2 \|Task 2
+__Write an SQL query that provides playerID, yearID, and batting average for players with at least 1 at bat that year. Sort the table from highest batting average to lowest, and then by playerid alphabetically. Show the top 5 results in your report.__
+
+- Some players with a perfect batting average though with a high probability to just 1 ab in the Major Leagues. For example 1.0 equals 1 Hit for 1 At-bat. How hard is it to get 1 H with 1 AB? Either you're technically known as the best hitter of all time or the worst.
+
+```{python}
+q2 = '''
+SELECT p.nameFirst AS "First Name", p.nameLast AS "Last Name", yearID, ((h*1.0)/ab) AS "BattingAverage"
+FROM batting b
+INNER JOIN people p ON b.playerID = p.playerID
+WHERE ab >= 1
+ORDER BY BattingAverage DESC, b.playerID ASC
+LIMIT 5
+'''
+
+results2 = pd.read_sql_query(q2,con)
+
+print(results2)
+```
+
+## Question 3 \|Task 3
+__Use the same query as above, but only include players with at least 10 at bats that year. Print the top 5 results.__
+
+- As we increase in at-bats we see a decrease in batting average though with the top 5 players still showing a high Batting Average percentage.
+
+```{python}
+q3 = '''
+SELECT p.nameFirst AS "First Name", p.nameLast AS "Last Name", yearID, ROUND(((h*1.0)/ab), 3) AS "BattingAverage"
+FROM batting b
+INNER JOIN people p ON b.playerID = p.playerID
+WHERE ab >= 10
+ORDER BY BattingAverage DESC, b.playerID ASC
+LIMIT 5
+'''
+
+results3 = pd.read_sql_query(q3,con)
+
+print(results3)
+
+
+```
+
+## Question 4 \|Task 4
+__Now calculate the batting average for players over their entire careers (all years combined). Only include players with at least 100 at bats, and print the top 5 results.__
+
+- Of all the players of all time we see the top 5 with the best batting averages with over 100 at-bats. The player who played the longest with the highest batting average would be Ichiro Suziki from the Seattle Mariners with a .387 and over 650 at-bats.
+
+
+```{python}
+q4 = '''
+SELECT p.nameFirst AS "First Name", p.nameLast AS "Last Name", yearID, ROUND(((h*1.0)/ab), 3) AS "BattingAverage"
+FROM batting b
+INNER JOIN people p ON b.playerID = p.playerID
+WHERE ab >= 100
+ORDER BY BattingAverage DESC, b.playerID ASC
+LIMIT 5
+'''
+
+results4 = pd.read_sql_query(q4,con)
+
+print(results4)
+
+
+```
+
+
+## Question 5 \|Task 5
+__Pick any two baseball teams and compare them using a metric of your choice (average salary, home runs, number of wins, etc). Write an SQL query to get the data you need, then make a graph using Plotly Express to visualize the comparison. What do you learn?__
+
+- An interesting comparison between the Atlanta Braves and Seattle Mariners showing the number of Hall of Fame players and Wins and Losses. As we see an increase of Hall of Fame players we see an increase of leverge of wins over losses. Though not a huge difference of wins in this graph, if we consider over all years we see that a higher win amount can have an impact as Seattle has yet to win a World Series.
+
+```{python}
+q5 = '''
+SELECT a.teamID, COUNT(*) AS "HallofFameInductees", ROUND(AverageWins, 2) AS "AverageWins",ROUND(AverageLoss, 2) AS "AverageLoss", ROUND(BattingAverage,3) AS "AverageBattingAvg", ERA
+FROM(
+  SELECT hof.playerID, s.teamID
+  FROM halloffame hof
+  INNER JOIN salaries s ON hof.playerID = s.playerID
+  WHERE inducted = "Y"
+) a 
+LEFT JOIN (
+  SELECT teamID, AVG(W) AS "AverageWins", AVG(L) AS "AverageLoss", AVG(ROUND(((H*1.0)/AB), 3)) AS "BattingAverage", ERA
+  FROM teams
+  GROUP BY teamID
+) b ON a.teamID = b.teamID
+WHERE a.teamID IN ("ATL","SEA")
+GROUP BY a.teamID
+ORDER BY HallofFameInductees DESC
+LIMIT 2
+'''
+results5 = pd.read_sql_query(q5,con)
+# print(results5)
+
+# Set the width of the bars
+barWidth = 0.15
+
+# Set position of bar on X axis
+r1 = np.arange(len(results5['teamID']))
+r2 = [x + barWidth for x in r1]
+r3 = [x + barWidth for x in r2]
+r4 = [x + barWidth for x in r3]
+r5 = [x + barWidth for x in r4]
+
+# Make the plot
+plt.bar(r1, results5['HallofFameInductees'], color='b', width=barWidth, edgecolor='grey', label='HallofFameInductees')
+plt.bar(r2, results5['AverageWins'], color='r', width=barWidth, edgecolor='grey', label='AverageWins')
+plt.bar(r3, results5['AverageLoss'], color='y', width=barWidth, edgecolor='grey', label='AverageLoss')
+
+# Adding xticks
+plt.xlabel('Team ID', fontweight='bold')
+plt.xticks([r + barWidth for r in range(len(results5['teamID']))], results5['teamID'])
+
+plt.legend()
+plt.show()
+
+```
+
+## Question 6 \|Task 6
+__Write an SQL query that provides a summary table showing the average salary for players in each position (e.g., pitcher, catcher, outfielder) across all years. Include the following columns:position, average_salary, total_players, and highest_salary. Additionally, create a new column called salary_category using a case statement: If the average salary is above $1 million, categorize it as “High Salary.” If the average salary is between $250,000 and $1 million, categorize it as “Medium Salary.” Otherwise, categorize it as “Low Salary.”__
+
+- Pitchers are what lead the pack in average salary and don't have any other position close to them on their heels. The disparity is huge between pitchers and the other positions but we all understand that pitchers win championships.
+
+```{python}
+q6 = '''
+SELECT *,
+CASE
+  WHEN CAST(AvgSalary AS FLOAT) >= 1000000 THEN "High Salary"
+  WHEN CAST(AvgSalary AS FLOAT) >= 250000 AND CAST(AvgSalary AS FLOAT) < 1000000 THEN "Medium Salary"
+  ELSE "Low Salary"
+END AS "Salary Bracket"
+FROM(
+  SELECT a.POS, printf('%.2f', AvgSalary) AS "AvgSalary", "Number of Position Players", "Highest Salary"
+  FROM(
+    SELECT f.playerID, s.yearID, AVG(s.salary) AS "AvgSalary", f.POS, MAX(s.salary) AS "Highest Salary"
+    FROM salaries s INNER JOIN fielding f ON s.playerID = f.playerID
+    GROUP BY s.playerID
+  ) a INNER JOIN(
+    SELECT COUNT(*) AS "Number of Position Players", POS
+    FROM fielding
+    GROUP BY POS
+  ) b ON a.POS = b.POS
+  GROUP BY a.POS
+)c
+'''
+
+results6 = pd.read_sql_query(q6,con)
+
+print(results6)
+
+
+```
+
+## Question 7 \|Task 7
+
+__Find the average years played by each position and sort by average years played descending__
+
+- 1st base is not a physically demanding position and that may be why they last the longest. We see the average playing years for a 1st baseman is 6 years while shortstops only play half of that. Compared to the last graph the pay for each position is similar, is it better to invest in 1st baseman over shortstops due to their durability to length of years?
+
+```{python}
+q7 = '''
+SELECT POS, ROUND(AVG(YearsPlayed),2) AS "Average Years Played"
+FROM(
+  SELECT a.playerID, p.nameFirst, p.nameLast, (LastYear - FirstYear) AS "YearsPlayed", LastYear, POS
+  FROM(
+    SELECT playerID, MIN(yearID) AS "FirstYear", MAX(yearID) "LastYear", POS
+    FROM fielding
+    GROUP BY playerID
+  )a INNER JOIN people p ON a.playerID = p.playerID
+  ORDER BY YearsPlayed DESC
+)b
+GROUP BY POS
+ORDER BY "Average Years Played" DESC
+'''
+
+results7 = pd.read_sql_query(q7,con)
+
+print(results7)
+
+```
+

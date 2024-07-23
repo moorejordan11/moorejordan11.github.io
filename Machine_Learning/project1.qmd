@@ -1,7 +1,7 @@
 ---
-title: "Client Report - [Insert Project Title]"
+title: "Client Report - Project 4"
 subtitle: "Course DS 250"
-author: "[STUDENT NAME]"
+author: "Jordan Moore"
 format:
   html:
     self-contained: true
@@ -25,4 +25,316 @@ execute:
     
 ---
 
-### Paste in a template
+```{python}
+import pandas as pd 
+import numpy as np 
+import plotly_express as px
+from sklearn.model_selection import train_test_split
+from sklearn import tree 
+from sklearn.metrics import RocCurveDisplay
+from sklearn import metrics
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.cluster import BisectingKMeans, KMeans
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import classification_report
+```
+
+## Elevator pitch
+- We try to predict everything possible because it also makes our lives easier. How can we use analytics to our advantage and practice to see if we can predict past data and find what works and what doesn't work. We used prediction analysis to predict that you would read this report.
+
+```{python}
+dwellings_ml = pd.read_csv("https://raw.githubusercontent.com/byuidatascience/data4dwellings/master/data-raw/dwellings_ml/dwellings_ml.csv")
+
+```
+
+## Question 1\|Task 1
+__Create 2-3 charts that evaluate potential relationships between the home variables and before1980. Explain what you learn from the charts that could help a machine learning algorithm.__
+-In the first chart we see that has size of different aspects like living space size that the liklihood of the house being built after 1980 increases. The second chart shows the correlation that as basement size increase then the predictability of the house being built after 1980 increases as well.
+
+```{python}
+h_subset = dwellings_ml.filter(
+    ['livearea', 'finbsmnt', 'basement', 
+    'nocars', 'numbdrm', 'quality_C', 'before1980',
+    'stories', 'yrbuilt']).sample(500)
+chart = px.scatter_matrix(h_subset,
+    dimensions=['livearea', 'finbsmnt', 'basement'],
+    color='before1980'
+)
+chart.update_traces(diagonal_visible=False)
+chart.update_layout(
+    title_text="Scatter Matrix of Living Area, Finished Basement, and Total Basement",
+    title_x=0.5,
+    annotations=[
+        dict(
+            text="Relationships between year built and sizes of the three categories with yellow being before 1980",
+            showarrow=False,
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=-0.2,  # This is for adjusting caption location
+            font=dict(size=12)
+        )
+    ]
+)
+chart.show()
+
+```
+
+```{python}
+X = dwellings_ml[['basement']].values
+y = dwellings_ml['yrbuilt'].values
+
+# Splits the data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Scales the features
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+
+# Creates a range of X values for prediction
+T = np.linspace(X.min(), X.max(), 500).reshape(-1, 1)
+T_scaled = scaler.transform(T)
+
+# Sets up the plot
+fig, axs = plt.subplots(2, 1, figsize=(10, 12))
+# Nearest neighbors amount can be switched around. 5 seemed to be the most efficient model.
+n_neighbors = 4
+
+for i, weights in enumerate(["uniform", "distance"]):
+    knn = KNeighborsRegressor(n_neighbors, weights=weights)
+    knn.fit(X_train_scaled, y_train)
+    y_pred = knn.predict(T_scaled)
+
+    # Adds the trendline
+    z = np.polyfit(X_train.flatten(), y_train, 1)
+    p = np.poly1d(z)
+    trendline = p(T.flatten())
+
+    axs[i].scatter(X_train, y_train, color="darkorange", label="data", alpha=0.1)
+    axs[i].plot(T, y_pred, color="navy", label="prediction")
+    axs[i].plot(T, trendline, color="red", linestyle="--", label="trendline")
+    axs[i].set_xlabel('Basement Size')
+    axs[i].set_ylabel('Year Built')
+    axs[i].legend()
+    axs[i].set_title(f"KNeighborsRegressor (k = {n_neighbors}, weights = '{weights}')")
+
+plt.tight_layout()
+fig.suptitle("KNN Regression: Basement Size vs Year Built", fontsize=16, y=1.02)
+
+# Adds a caption
+caption = ("Figure 1: KNN Regression models comparing uniform and distance-based weights. "
+           "The plots show the relationship between basement size and year built, "
+           "with the original data points (orange), KNN prediction (navy), and linear trendline (red dashed).")
+
+fig.text(0.5, -0.05, caption, wrap=True, horizontalalignment='center', fontsize=12)
+plt.show()
+```
+
+## Question 2 \|Task 2
+__Build a classification model labeling houses as being built “before 1980” or “during or after 1980”. Your goal is to reach or exceed 90% accuracy. Explain your final model choice (algorithm, tuning parameters, etc) and describe what other models you tried.__
+-90% accuracy was achieved as the need to find the most efficient amount of features and which ones were used. As we don't want to use too many or not enough as we'll see later on why that matters. These are the metrics explained: 
+Precision: How many of the predicted positives are actually positive.
+Recall: How many of the actual positives were correctly identified.
+F1-score: The harmonic mean of precision and recall.
+Support: The number of instances for each class.
+We see our machine learning was efficient for both predictions and actual values.
+
+```{python}
+# %%
+X_pred = dwellings_ml.filter(regex='arcstyle_ONE-STORY|gartype_Att|quality_C|livearea|basement|stories|numbdrm')
+
+y_pred = dwellings_ml.filter(regex = "before1980")
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_pred, y_pred, test_size = .34, random_state = 76)  
+
+clf = tree.DecisionTreeClassifier()
+clf = clf.fit(X_train, y_train)
+y_pred = clf.predict(X_test)
+
+clf = RandomForestClassifier(n_estimators=10)
+clf = clf.fit(X_train, np.ravel(y_train))
+y_pred2 = clf.predict(X_test)
+
+# %%
+print(metrics.classification_report(y_pred2, y_test))
+```
+
+## Question 3 \|Task 3
+__Justify your classification model by discussing the most important features selected by your model. This discussion should include a feature importance chart and a description of the features.__
+-The features we used was the top 7 from this list. This chart shows the top features the prediction functions use in predicting whether a house was built before or after 1980. Live area in the Random Forest Classifier function was the most heavily weighted for it's predictions on whether it was before or after 1980.
+
+```{python}
+# %%
+df_features = pd.DataFrame(
+    {'f_names': X_train.columns, 
+    'f_values': clf.feature_importances_}).sort_values('f_values', ascending = False)
+
+#%%
+chart = px.bar(df_features.head(14),
+    x='f_values', 
+    y='f_names'
+)
+# The chart is saying that it made it's decision based off of the top row.
+chart.update_layout(yaxis={'categoryorder':'total ascending'})
+chart.update_layout(
+    title_text="Weighted values for Random Forest",
+    title_x=0.5,
+    annotations=[
+        dict(
+            text="The highest weighted values used by Random Forest prediction with the variables on the left and the weight on the bottom",
+            showarrow=False,
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=-0.2,  # This is for adjusting caption location
+            font=dict(size=12)
+        )
+    ]
+)
+chart.show()
+```
+
+## Question 4 \|Task 4
+__Describe the quality of your classification model using 2-3 different evaluation metrics. You also need to explain how to interpret each of the evaluation metrics you use.__
+-AUC Score (Area Under the Curve), this is a measure of the ability of the classifier to distinguish between classes.The AUC score ranges from 0 to 1, where 1.0 represents a perfect classifier and a 0.5 represents a classifier that's no better than random guessing. The closer the curve is towards the top left corner the better it is at predicting.
+```{python}
+# %% 
+#roc curve
+# Makes it so as you add more does it really add more?
+metrics.RocCurveDisplay.from_estimator(clf, X_test, y_test)
+fig = plt.gcf()
+caption = ("Figure 1: Receiver Operating Characteristic (ROC) Curve. "
+           "This plot shows the performance of the classifier at all classification thresholds. "
+           "The diagonal line represents random guessing, while the curve represents the model's performance. "
+           "A higher Area Under the Curve (AUC) indicates better classification performance.")
+
+plt.figtext(0.5, -0.05, caption, wrap=True, horizontalalignment='center', fontsize=10)
+plt.tight_layout()
+plt.subplots_adjust(bottom=0.2)
+
+plt.show()
+```
+
+Confusion matrix based on Random Forest Classifier shows a high percentage of predictions were correct as it predicted correctly 57% of the actual houses correclty and avoided 33% of the incorrect predictions. Confusion matrix explained: True Positive (TP): Predicted 1 (positive) and actually 1 (positive). True Negative (TN): Predicted 0 (negative) and actually 0 (negative). False Positive (FP): Predicted 1 (positive) but actually 0 (negative). False Negative (FN): Predicted 0 (negative) but actually 1 (positive).
+
+```{python}
+
+cm = confusion_matrix(y_test, y_pred2)
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+plt.xlabel('Predicted')
+plt.ylabel('Actual')
+plt.show()
+```
+
+
+
+## Question 5 \|Task 5
+__Repeat the classification model using 3 different algorithms. Display their Feature Importance, and Decision Matrix. Explian the differences between the models and which one you would recommend to the Client.__
+-There's different methods used to try and predict what we want. Below we see the comparison of numbers between using a Linear Regression model, Random Forest, or a Nearest Neighbor model. I explain below what the numbers mean. The Random Forest predicts more accurately then Linear Regression or Nearest Neighbor.
+
+Based on Random Forest our data shows: 
+MAE: Your model, on average, predicts the year a house was built with an error of around 8 months, which is relatively small considering the range of years.
+MSE: This metric is lower, indicating that while there are some larger errors, they do not significantly affect the overall average error.
+R-squared (R2): The R2 score of approximately 0.640 suggests that the model captures a moderate amount of variation in predicting the year a house was built based on the selected features using over 50% of the data.
+An R2 score of approximately 0.640 means that the model explains about 64% of the variance in the year built based on the features used. A higher R2 score closer to 1 indicates a better fit.
+Comparison for all three is below.
+
+```{python}
+# Random Forest data
+dwellings_ml_extra = dwellings_ml.copy()
+
+# Splits data into features (X) and target (y)
+X = dwellings_ml.filter(regex='arcstyle_ONE-STORY|gartype_Att|quality_C|livearea|basement|stories|sprice|netprice|numbdrm|finbsmnt')
+y = dwellings_ml.filter(regex = "before1980").values.ravel()
+
+# Splits data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Initializes and train the model
+model = RandomForestClassifier(random_state=42)
+model.fit(X_train, y_train)
+
+# Predicts on the test set
+y_pred = model.predict(X_test)
+
+# Evaluates the model
+accuracy = accuracy_score(y_test, y_pred)
+conf_matrix = confusion_matrix(y_test, y_pred)
+classification_rep = classification_report(y_test, y_pred)
+
+mae = mean_absolute_error(y_test, y_pred)
+mse = mean_squared_error(y_test, y_pred)
+r2 = r2_score(y_test, y_pred)
+
+print(f'Mean Absolute Error (MAE): {mae:.3f}')
+print(f'Mean Squared Error (MSE): {mse:.3f}')
+print(f'R-squared (R2): {r2:.3f}')
+```
+
+```{python}
+# Linear Regression data
+dwellings_ml_extra = dwellings_ml.copy()
+
+# Splits data into features (X) and target (y)
+X = dwellings_ml.filter(regex='arcstyle_ONE-STORY|gartype_Att|quality_C|livearea|basement|stories|sprice|netprice|numbdrm|finbsmnt')
+y = dwellings_ml.filter(regex = "before1980")
+
+# Splits data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Initializes and train the model
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+# Predicts on the test set
+y_pred = model.predict(X_test)
+
+# Evaluates the model
+mae = mean_absolute_error(y_test, y_pred)
+mse = mean_squared_error(y_test, y_pred)
+# rmse = mean_squared_error(y_test, y_pred, squared=False)
+r2 = r2_score(y_test, y_pred)
+
+print(f'Mean Absolute Error (MAE): {mae:.3f}')
+print(f'Mean Squared Error (MSE): {mse:.3f}')
+# print(f'Root Mean Squared Error (RMSE): {rmse}')
+print(f'R-squared (R2): {r2:.3f}')
+```
+
+```{python}
+# Nearest Neighbors data
+
+X = dwellings_ml.filter(regex='arcstyle_ONE-STORY|gartype_Att|quality_C|livearea|basement|stories')
+y = dwellings_ml['before1980']
+
+# Splits data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+knn_regressor = KNeighborsRegressor(n_neighbors=4)
+
+# Trains the model on the training data
+knn_regressor.fit(X_train, y_train)
+# Predicts on the test set
+y_pred = knn_regressor.predict(X_test)
+
+# Evaluates the model
+mae = mean_absolute_error(y_test, y_pred)
+mse = mean_squared_error(y_test, y_pred)
+r2 = r2_score(y_test, y_pred)
+
+print(f'Mean Absolute Error (MAE): {mae:.3f}')
+print(f'Mean Squared Error (MSE): {mse:.3f}')
+print(f'R-squared (R2): {r2:.3f}')
+```
+

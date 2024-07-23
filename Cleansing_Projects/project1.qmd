@@ -1,7 +1,7 @@
 ---
-title: "Client Report - [Insert Project Title]"
+title: "Client Report - Project 2"
 subtitle: "Course DS 250"
-author: "[STUDENT NAME]"
+author: "Jordan Moore"
 format:
   html:
     self-contained: true
@@ -25,4 +25,320 @@ execute:
     
 ---
 
-### Paste in a template
+```{python}
+#| label: libraries
+#| include: false
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import seaborn as sns
+import matplotlib.pyplot as plt
+import math
+from IPython.display import display
+```
+
+## Elevator pitch
+
+Delays affects us all in life but it's ten times more frustrating to find something to do in your airport terminal because you have to wait 5 more hours due to them. Is there a way to find an airport that has the least amount of delays and maybe find ways to fly through one of those cities instead of say, Chicago?
+
+```{python}
+# Learn morea about Code Cells: https://quarto.org/docs/reference/cells/cells-jupyter.html
+
+# Include and execute your code here
+#df = pd.read_csv("https://raw.githubusercontent.com/byuidatascience/data4missing/master/data-raw/flights_missing/flights_missing.json")
+url_flights = ("https://raw.githubusercontent.com/byuidatascience/data4missing/master/data-raw/flights_missing/flights_missing.json")
+flights = pd.read_json(url_flights)
+# flights
+# flights.airport_code.unique()
+```
+
+
+## Question\|Task 1
+__Fix all of the varied missing data types in the data to be consistent (all missing values should be displayed as “NaN”). In your report include one record example (one row) from your new data, in the raw JSON format. Your example should display the “NaN” for at least one missing value.__
+
+As you see in the first table there was several missing data from the data set and the first table shows an example of an "N/A" found. The second table is all cleaned up and fixed so that the data could be properly translated and shown in figures that are easy to understand and to read.
+
+
+```{python}
+
+missing_data_one = flights
+flights = flights.replace('',np.nan)
+missing_data_one = flights[flights.isna().any(axis=1)]
+missing_data_one = missing_data_one.head(1)
+display(missing_data_one.iloc[:, :5])
+# missing_data_one
+```
+
+```{python}
+
+# Replacing and cleaning all of the information here
+flights = flights.replace('',np.nan)
+flights = flights.replace(-999,np.nan)
+# All columns that needed to be filled with values other than missing or -999.
+columns_to_fill = [
+    'num_of_flights_total', 'num_of_delays_carrier', 'num_of_delays_late_aircraft',
+    'num_of_delays_nas', 'num_of_delays_security', 'num_of_delays_weather',
+    'num_of_delays_total', 'minutes_delayed_carrier', 'minutes_delayed_late_aircraft',
+    'minutes_delayed_nas', 'minutes_delayed_security', 'minutes_delayed_weather'
+]
+for column in columns_to_fill: # Forces the fill with coerce
+    flights[column] = pd.to_numeric(flights[column], errors='coerce')
+
+for column in columns_to_fill: # Fill the columns of flights with the median with columns to fill.
+    flights[column] = flights[column].replace(np.nan, flights[column].median())
+
+flights.airport_name = flights.airport_name.replace(np.nan,"missing")
+flights.month= flights.month.replace('n/a', np.nan).fillna(method='ffill') 
+
+# Runs a loop to replace the airport name if the airport code matches what's to the left.
+airport_code = ['ATL', 'DEN', 'IAD', 'ORD', 'SAN', 'SFO', 'SLC']
+airport_name = [
+    'Atlanta, GA: Hartsfield-Jackson Atlanta International',
+    'Denver, CO: Denver International',
+    'Washington, DC: Washington Dulles International',
+    "Chicago, IL: Chicago O'Hare International",
+    'San Diego, CA: San Diego International',
+    'San Francisco, CA: San Francisco International',
+    'Salt Lake City, UT: Salt Lake City International']
+
+for codes, names in zip(airport_code, airport_name):
+    flights.loc[flights['airport_code'] == codes, 'airport_name'] = names
+
+
+flights_copy = flights
+selected_columns = flights_copy[['airport_name','num_of_flights_total','num_of_delays_total']]
+# Creates the table and headers
+selected_columns = selected_columns.groupby('airport_name').agg(Total_Flights = ('num_of_flights_total','sum'),Total_Flights_Delayed = ('num_of_delays_total','sum'))
+selected_columns = selected_columns.rename(columns={"Total_Flights": "Total Flights","Total_Flights_Delayed": "Total Flights Delayed"})
+selected_columns = selected_columns.rename_axis("Airport Name") # Cause index names have to be difficult
+selected_columns['Total Flights'] = selected_columns['Total Flights'].apply(lambda x: "{:,}".format(x))
+selected_columns['Total Flights Delayed'] = selected_columns['Total Flights Delayed'].apply(lambda x: "{:,}".format(x))
+display(selected_columns)
+```
+
+## Question\|Task 2
+
+__Which airport has the worst delays? Describe the metric you chose, and why you chose it to determine the “worst” airport. Your answer should include a summary table that lists (for each airport) the total number of flights, total number of delayed flights, proportion of delayed flights, and average delay time in hours.__
+
+Frank Sinatra did talk very highly of Chicago in his hit song "Chicago", but do we really want to fly out of there? We can see that they have the highest total average hours delay per day of all of the chosen airports. Now Atlanta is sure close behind and if Frank Sinatra were to still be alive and sing a song about them too I'm sure they'd be just as delayed as Chicago.
+
+```{python}
+
+ad = flights
+
+# Axis 1 means columns, axis 0 means rows.
+# Adding new columns with different math.
+ad['Total_Flights_Delayed'] = ad['num_of_delays_carrier'] + ad['num_of_delays_late_aircraft'] + ad['num_of_delays_nas'] + ad['num_of_delays_security'] + ad['num_of_delays_weather']+ad['num_of_delays_total']
+ad['Percentage'] = ad['Total_Flights_Delayed'] / ad['num_of_flights_total']
+ad['Hours_delayed'] = ((ad['minutes_delayed_total'] / 43800)) # This divied each month by 30 days and then 24 hours to get the avg delay per day.
+
+
+selected_columns = ad[['airport_code','airport_name','Total_Flights_Delayed','Percentage','num_of_flights_total','Hours_delayed']]
+# Creates the table and headers
+ad = selected_columns.groupby('airport_code').agg(Total_Flights = ('num_of_flights_total','sum'),Total_Flights_Delayed = ('Total_Flights_Delayed','sum'), Total_Flight_Percent_Delayed = ('Percentage','mean'),Average_Hours_Delayed_per_Day = ('Hours_delayed','mean'))
+
+# Renames the columns
+ad = ad.rename(columns={"Total_Flights": "Total Flights","Total_Flights_Delayed": "Total Flights Delayed","Total_Flight_Percent_Delayed": "Percentage of Delays","Average_Hours_Delayed_per_Day":"Total Average Time per Day Delayed"})
+ad = ad.rename_axis("Airport Code") # Cause index names have to be difficult
+
+# Format changes to make it look better and add the % and , for the amounts
+ad['Total Flights'] = ad['Total Flights'].apply(lambda x: "{:,}".format(x))
+ad['Total Flights Delayed'] = ad['Total Flights Delayed'].apply(lambda x: "{:,}".format(x))
+ad['Percentage of Delays'] = ad['Percentage of Delays'].apply(lambda x: round(x * 100, 2))
+ad['Percentage of Delays'] = ad['Percentage of Delays'].astype(str) + '%'
+ad['Total Average Time per Day Delayed'] = ad['Total Average Time per Day Delayed'].apply(lambda x: round(x,2))
+
+
+# Create a new column 'color' and set its value to lightblue for all rows
+ad['color'] = 'lightblue'
+# Sets the new color for one bar in particular if needed
+ad.loc['ORD', 'color'] = 'blue'
+ad.reset_index(inplace=True) # This makes it so months will show up.
+fig = px.bar(ad, x='Airport Code', y='Total Average Time per Day Delayed', color='color', color_discrete_map={'lightblue':'lightblue', 'blue':'blue'})
+fig.update_layout(title={'text': 'Does Chicago really want us to visit?', 'x': 0.5}, showlegend=False)
+fig.update_xaxes(title_text='')
+fig.update_yaxes(title_text='Total Average Time per Day Delayed')
+fig.show()
+
+
+
+```
+
+## Question\|Task 3
+
+__What is the best month to fly if you want to avoid delays of any length? Describe the metric you chose and why you chose it to calculate your answer. Include one chart to help support your answer, with the x-axis ordered by month. (To answer this question, you will need to remove any rows that are missing the Month variable.)__
+
+Planning trips is always the biggest hassle and unknown and it's hard to plan around certain months due to unseen circumstances, funerals, jobs, your neice's quinceanera, etc. But if we were planning a vacation when would be the best time to plan? September, though Green Day once said to "Wake me up when September ends", he obviously never flew out of Chicago in the summer because September would save us most of the delays.
+
+```{python}
+md = flights
+md['month'] = md['month'].replace('Febuary', 'February')
+# Axis 1 means columns, axis 0 means rows.
+# Adding new columns with different math.
+md['Total_Flights_Delayed'] =md['num_of_delays_carrier'] + md['num_of_delays_late_aircraft'] + md['num_of_delays_nas'] + md['num_of_delays_security'] + md['num_of_delays_weather']+md['num_of_delays_total']
+md['Percentage'] = md['Total_Flights_Delayed'] / md['num_of_flights_total']
+md['Hours_delayed'] = ((md['minutes_delayed_total'] / 60)/30)/24 # This divied each month by 30 days and then 24 hours to get the avg delay per day.
+
+selected_columns2 = md[['month','Total_Flights_Delayed','Percentage','num_of_flights_total','Hours_delayed']]
+# Creates the table and headers
+md = selected_columns2.groupby('month').agg(Total_Flights = ('num_of_flights_total','sum'),Total_Flights_Delayed = ('Total_Flights_Delayed','sum'), Total_Flight_Percent_Delayed = ('Percentage','mean'),Total_Hours_Delayed_per_Day = ('Hours_delayed','mean'))
+
+# Format changes to make it look better
+md['Total_Flights'] = md['Total_Flights'].apply(lambda x: "{:,}".format(x))
+md['Total_Flights_Delayed'] = md['Total_Flights_Delayed'].apply(lambda x: "{:,}".format(x))
+md['Total_Flight_Percent_Delayed'] = md['Total_Flight_Percent_Delayed'].apply(lambda x: round(x * 100, 2))
+md['Total_Flight_Percent_Delayed'] = md['Total_Flight_Percent_Delayed'].astype(str) + '%'
+md['Total_Hours_Delayed_per_Day'] = md['Total_Hours_Delayed_per_Day'].apply(lambda x: round(x,2))
+
+month_order = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+md.index = pd.Categorical(md.index, categories=month_order, ordered=True)
+md = md.sort_index()
+
+md.reset_index(inplace=True) # This makes it so months will show up.
+fig = px.bar(md, x='index', y='Total_Hours_Delayed_per_Day', color_discrete_sequence=['lightblue'])
+fig.update_layout(title={'text': 'Ever heard of a September vacation?', 'x': 0.5})
+fig.update_xaxes(title_text='')
+fig.update_yaxes(title_text='Hour delays per day')
+fig.show()
+```
+
+
+## Question\|Task 4
+
+__According to the BTS website, the “Weather” category only accounts for severe weather delays. Mild weather delays are not counted in the “Weather” category, but are actually included in both the “NAS” and “Late-Arriving Aircraft” categories. Your job is to create a new column that calculates the total number of flights delayed by weather (both severe and mild)__
+
+If we were just looking at weather related events we would want to fly out of Salt Lake City as they only have a 4.25% chance of weather delay and a 100% chance of your child not screaming because you were stuck in the airport for 6 hours due to a delay in San Francisco. We see San Francisco has 10% chance of being delayed due to weather and seeing as they have a 52% in total of being delayed do we really want to fly through San Francisco?
+```{python}
+
+wd = flights
+
+
+# Axis 1 means columns, axis 0 means rows.
+# Adding new columns with different math.
+wd['Severe_Weather_Delays'] = wd['num_of_delays_weather']
+wd['Mild_Weather_Delays'] = (wd['num_of_delays_late_aircraft'] * .3)
+wd['Mild_Nas'] = np.where(wd['month'].isin(['April', 'May', 'June', 'July', 'August']), wd['num_of_delays_nas'] * 0.4, wd['num_of_delays_nas'] * 0.65)
+wd['Weather_Delays_Total'] = wd['Severe_Weather_Delays'] + wd['Mild_Weather_Delays'] + wd['Mild_Nas']
+wd['Chance_of_Weather'] = wd['Weather_Delays_Total'] / wd['num_of_flights_total']
+
+# Creates the columns to pull from
+selected_info = wd[['airport_name','Total_Flights_Delayed','Percentage','num_of_flights_total','Hours_delayed', 'Weather_Delays_Total','Chance_of_Weather']]
+# Creates the table and headers
+wd = selected_info.groupby('airport_name').agg(Total_Flights = ('num_of_flights_total','sum'),Total_Flights_Delayed = ('Total_Flights_Delayed','sum'), Total_Flight_Percent_Delayed = ('Percentage','mean'),        Total_Hours_Delayed_per_Day = ('Hours_delayed','mean'),Total_Weather_Delays = ('Weather_Delays_Total','sum'), Chance_of_Weather_Delay = ('Chance_of_Weather','mean'))
+
+# Formatting
+wd['Total_Flights'] = wd['Total_Flights'].apply(lambda x: "{:,}".format(x))
+wd['Total_Flights_Delayed'] = wd['Total_Flights_Delayed'].apply(lambda x: "{:,}".format(x))
+wd['Total_Flight_Percent_Delayed'] = wd['Total_Flight_Percent_Delayed'].apply(lambda x: round(x * 100, 2))
+wd['Total_Flight_Percent_Delayed'] = wd['Total_Flight_Percent_Delayed'].astype(str) + '%'
+wd['Total_Hours_Delayed_per_Day'] = wd['Total_Hours_Delayed_per_Day'].apply(lambda x: round(x,2))
+wd['Total_Weather_Delays'] = wd['Total_Weather_Delays'].apply(lambda x: "{:,}".format(x))
+wd['Chance_of_Weather_Delay'] = wd['Chance_of_Weather_Delay'].apply(lambda x: round(x * 100, 2))
+wd['Chance_of_Weather_Delay'] = wd['Chance_of_Weather_Delay'].astype(str) + '%'
+wd
+```
+
+
+## Question\|Task 5
+
+__Using the new weather variable calculated above, create a barplot showing the proportion of all flights that are delayed by weather at each airport. Describe what you learn from this graph.__
+
+We can see Atlanta and Chicago are neck and neck with total weather delays but if we skim down the bar chart to only show "Severe Weather Delays" we can see Atlanta surpasses everyone else. Why does that matter? I've never heard of a severe thunderstorms and rain caring about whether your flight to Laguardia to see your Grandma's daughter and waiting till your plane took off to resume. But Chicago always comes back around and prove that they too want to hurt your vacation and keep you around just a little bit longer.
+
+```{python}
+
+gd = flights
+gd['Severe_Weather_Delays'] = gd['num_of_delays_weather']
+gd['Mild_Weather_Delays'] = (gd['num_of_delays_late_aircraft'] * .3)
+gd['Mild_Nas'] = np.where(gd['month'].isin(['April', 'May', 'June', 'July', 'August']), gd['num_of_delays_nas'] * 0.4, gd['num_of_delays_nas'] * 0.65)
+gd['Mild_Weather_Total'] = gd['Mild_Weather_Delays'] + gd['Mild_Nas']
+gd['Weather_Delays_Total'] = gd['Severe_Weather_Delays'] + gd['Mild_Weather_Delays'] + gd['Mild_Nas']
+
+
+# Creates the columns to pull from
+selected_info = gd[['airport_code','num_of_flights_total','Severe_Weather_Delays','Mild_Weather_Delays','Mild_Nas','Weather_Delays_Total']]
+# Creates the table and headers
+gd = selected_info.groupby('airport_code').agg(Total_Flights = ('num_of_flights_total','sum'),Total_Weather_Delays = ('Weather_Delays_Total','sum'), Severe_Weather =('Severe_Weather_Delays','sum'), Mild_Weather =('Mild_Weather_Delays','sum'), Mild_Weather_Nas =('Mild_Nas','sum'))
+# Resetting index to turn 'airport_name' into a column instead of index
+gd.reset_index(inplace=True)
+
+# Melt DataFrame to create long-form data suitable for plotting
+gd_melted = pd.melt(gd, id_vars='airport_code', value_vars=['Severe_Weather', 'Mild_Weather', 'Mild_Weather_Nas'], var_name='Delay_Type', value_name='Count')
+ad = ad.rename(columns={"Total_Weather_Delays": "Total Weather Delays"})
+# Create the bar chart using Plotly Express
+fig = px.bar(gd_melted, x='airport_code', y='Count', color='Delay_Type',
+             labels={'Count': 'Total Weather Delays', 'airport_code': ' ', 'Delay_Type': 'Weather Delay Type'},
+             title='Total Flights and Weather Delays per Airport')
+fig.update_layout(title={'text': 'Washington D.C. is always beautiful to visit', 'x': 0.5})
+fig.update_traces(name='Severe Weather Delays', selector=dict(name='Severe_Weather'))
+fig.update_traces(name='Mild Weather Delays', selector=dict(name='Mild_Weather'))
+fig.update_traces(name='Mild Weather Nas Delays', selector=dict(name='Mild_Weather_Nas'))
+fig.show()
+```
+
+## Question\|Task 6
+
+__Which delay is the worst delay? Create a similar analysis as above for Weahter Delay with: Carrier Delay and Security Delay. Compare the proportion of delay for each of the three categories in a Chart and a Table. Describe your results.__
+
+Late Aircraft is sure a hassle as that is what's causing the biggest delay at almost every airport accross the board. Why? Not sure because it could be due to several factors at whatever departure airport there is, especially Chicago, but otherwise they're late. Can you see those small gaps in between late aircraft and weather delays? That's security delays, don't worry about that. Because if you're late to your aircraft for a security delay they'll leave without you anyways.
+
+```{python}
+dd = flights
+
+dd['Percentage_Carrier_Delays'] = dd['num_of_delays_carrier'] / dd['num_of_delays_total']
+dd['Percentage_Late_Aircraft_Delays'] = dd['num_of_delays_late_aircraft'] / dd['num_of_delays_total']
+dd['Percentage_Security_Delays'] = dd['num_of_delays_security'] / dd['num_of_delays_total']
+dd['Percentage_Weather_Delays'] = dd['num_of_delays_weather'] / dd['num_of_delays_total']
+
+dd = dd[['airport_name','airport_code','num_of_flights_total','Percentage_Carrier_Delays','Percentage_Late_Aircraft_Delays','Percentage_Security_Delays','Percentage_Weather_Delays','num_of_delays_total']]
+# Creates the table and headers
+dd = dd.groupby('airport_name').agg(Percentage_Carrier_Delays = ('Percentage_Carrier_Delays','mean'), Percentage_Late_Aircraft_Delays = ('Percentage_Late_Aircraft_Delays','mean'),Percentage_Security_Delays = ('Percentage_Security_Delays','mean'),Percentage_Weather_Delays=('Percentage_Weather_Delays','mean'))
+
+dd = dd.rename(columns={ 'Percentage_Carrier_Delays': 'Percentage Carrier Delays', 'Percentage_Late_Aircraft_Delays': 'Percentage Late Aircraft Delays','Percentage_Security_Delays': 'Percentage Security Delays','Percentage_Weather_Delays': 'Percentage Weather Delays'})
+
+dd['Percentage Carrier Delays'] = dd['Percentage Carrier Delays'].apply(lambda x: round(x * 100, 2))
+dd['Percentage Carrier Delays'] = dd['Percentage Carrier Delays'].astype(str) + '%'
+dd['Percentage Late Aircraft Delays'] = dd['Percentage Late Aircraft Delays'].apply(lambda x: round(x * 100, 2))
+dd['Percentage Late Aircraft Delays'] = dd['Percentage Late Aircraft Delays'].astype(str) + '%'
+dd['Percentage Security Delays'] = dd['Percentage Security Delays'].apply(lambda x: round(x * 100, 2))
+dd['Percentage Security Delays'] = dd['Percentage Security Delays'].astype(str) + '%'
+dd['Percentage Weather Delays'] = dd['Percentage Weather Delays'].apply(lambda x: round(x * 100, 2))
+dd['Percentage Weather Delays'] = dd['Percentage Weather Delays'].astype(str) + '%'
+dd = dd.rename_axis("Airport Name") # Cause index names have to be difficult
+dd
+```
+
+```{python}
+dd = flights
+
+dd['Percentage_Carrier_Delays'] = dd['num_of_delays_carrier'] / dd['num_of_delays_total']
+dd['Percentage_Late_Aircraft_Delays'] = dd['num_of_delays_late_aircraft'] / dd['num_of_delays_total']
+dd['Percentage_Security_Delays'] = dd['num_of_delays_security'] / dd['num_of_delays_total']
+dd['Percentage_Weather_Delays'] = dd['num_of_delays_weather'] / dd['num_of_delays_total']
+
+dd = dd[['airport_name','airport_code','num_of_flights_total','Percentage_Carrier_Delays','Percentage_Late_Aircraft_Delays','Percentage_Security_Delays','Percentage_Weather_Delays','num_of_delays_total']]
+# Creates the table and headers
+dd = dd.groupby('airport_code').agg(Percentage_Carrier_Delays = ('Percentage_Carrier_Delays','mean'), Percentage_Late_Aircraft_Delays = ('Percentage_Late_Aircraft_Delays','mean'),Percentage_Security_Delays = ('Percentage_Security_Delays','mean'),Percentage_Weather_Delays=('Percentage_Weather_Delays','mean'))
+
+dd = dd.rename(columns={ 'Percentage_Carrier_Delays': 'Percentage Carrier Delays', 'Percentage_Late_Aircraft_Delays': 'Percentage Late Aircraft Delays','Percentage_Security_Delays': 'Percentage Security Delays','Percentage_Weather_Delays': 'Percentage Weather Delays'})
+
+dd['Percentage Carrier Delays'] = dd['Percentage Carrier Delays'].apply(lambda x: round(x * 100, 2))
+dd['Percentage Carrier Delays'] = dd['Percentage Carrier Delays'].astype(str) + '%'
+dd['Percentage Late Aircraft Delays'] = dd['Percentage Late Aircraft Delays'].apply(lambda x: round(x * 100, 2))
+dd['Percentage Late Aircraft Delays'] = dd['Percentage Late Aircraft Delays'].astype(str) + '%'
+dd['Percentage Security Delays'] = dd['Percentage Security Delays'].apply(lambda x: round(x * 100, 2))
+dd['Percentage Security Delays'] = dd['Percentage Security Delays'].astype(str) + '%'
+dd['Percentage Weather Delays'] = dd['Percentage Weather Delays'].apply(lambda x: round(x * 100, 2))
+dd['Percentage Weather Delays'] = dd['Percentage Weather Delays'].astype(str) + '%'
+
+# Takes away the % part to make it so it's out of 100% total
+for column in ['Percentage Carrier Delays', 'Percentage Late Aircraft Delays', 'Percentage Security Delays', 'Percentage Weather Delays']:
+    dd[column] = dd[column].str.rstrip('%').astype('float')
+# Merges the data to have one row per delay type per airport
+dd_melted = dd.reset_index().melt(id_vars='airport_code', value_vars=['Percentage Carrier Delays', 'Percentage Late Aircraft Delays', 'Percentage Security Delays', 'Percentage Weather Delays'])
+fig = px.bar(dd_melted, x='airport_code', y='value', color='variable', barmode='group', title='Delay Percentages by Airport',
+             labels={'value': 'Delay Percentage', 'variable': 'Delay Type', 'airport_code': 'Airport'})
+
+fig.show()
+
+```
